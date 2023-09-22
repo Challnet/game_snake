@@ -1,88 +1,177 @@
-
-let fields = document.querySelectorAll('.game__field');
-let scoreElements = document.querySelectorAll('.game__score span');
-console.log(scoreElements);
-let game = [
-    ['', '', ''],
-    ['', '', ''],
-    ['', '', ''],
-]
-let currentPlayer = 'cross';
-
-function clearFields(fields, game) {
-    for (let i = 0; i < fields.length; i++) {
-        let field = fields[i];
-        field.classList.remove('cross', 'zero');
-
-        let row = Math.floor(i / 3);
-        let column = i % 3;
-        game[row][column] = '';
-    }
+let BlockType = {
+    DEFAULT: "default",
+    HEAD: 'head',
+    TAIL: 'tail',
+    FRUIT: 'fruit'
 }
 
-function checkWin(isEmpty, isEqual) {
-    if (!isEmpty && isEqual) {
-        let playerIndex = currentPlayer === 'cross' ? 0 : 1;
-        let playerScore = parseInt(scoreElements[playerIndex].innerText);
-        scoreElements[playerIndex].innerText = playerScore + 1;
-        clearFields(fields, game);
-    }
+let Direction = {
+    UP: 'up',
+    DOWN: 'down',
+    RIGHT: 'right',
+    LEFT: 'left'
 }
 
-function checkDraw(fields, game) {
-    let filledCount = 0;
-    for (let i = 0; i < game.length; i++) {
-        let currentRow = game[i];
-        let isFull = currentRow[0] !== '' && currentRow[1] !== '' && currentRow[2] !== '';
-        if (isFull) {
-            filledCount++;
-        }
-    }
-    if (filledCount === 3) {
-        clearFields(fields, game);
-    }
+let KeyName = {
+    ArrowUp: 'ArrowUp',
+    ArrowDown: 'ArrowDown',
+    ArrowLeft: 'ArrowLeft',
+    ArrowRight: 'ArrowRight'
 }
 
-for (let i = 0; i < fields.length; i++) {
-    let field = fields[i];
+let DirectionMap = {
+    [KeyName.ArrowUp] : Direction.UP,
+    [KeyName.ArrowDown] : Direction.DOWN,
+    [KeyName.ArrowLeft] : Direction.LEFT,
+    [KeyName.ArrowRight] : Direction.RIGHT
+}
 
-    field.addEventListener('click', function () {
-        if (field.classList.contains('cross') || field.classList.contains('zero')) {
-            return;
+let directionDelta = {
+    [Direction.UP]: {x: 0, y: -1},
+    [Direction.DOWN]: {x: 0, y: 1},
+    [Direction.LEFT]: {x: -1, y: 0},
+    [Direction.RIGHT]: {x: 1, y: 0},
+}
+
+// game state
+let game = {
+    map: document.querySelector('.game'),
+    mapHeight: 25,
+    mapWidth: 25,
+    get mapCenterX() {
+        return Math.floor(this.mapWidth / 2);
+    },
+    get mapCenterY() {
+        return Math.floor(this.mapHeight / 2);
+    },
+    isStarted: false,
+
+    async start() {
+        this.isStarted = true;
+
+        while (true) {
+            snake.move();
+            game.draw();
+            await sleep(1000 / 20);
         }
-        let row = Math.floor(i / 3);
-        let column = i % 3;
-        game[row][column] = currentPlayer;
-        field.classList.add(currentPlayer);
+    },
 
-        for (let j = 0; j < game.length; j++) {
-            let currentRow = game[j];
-            let isEmpty = currentRow[0] === '' || currentRow[1] === '' || currentRow[2] === '';
-            let isEqual = currentRow[0] === currentRow[1] && currentRow[1] === currentRow[2];
-            checkWin(isEmpty, isEqual);
+    draw() {
+        let headElement = document.querySelector('.head');
+        headElement.classList.remove('head');
+
+        let tailElements = document.querySelectorAll( '.tail');
+        tailElements.forEach((element) => {
+            element.classList.remove('tail');
+        });
+
+        let newHeadElement = document.querySelector( `[data-x="${snake.head.x}"][data-y="${snake.head.y}"]`);
+        newHeadElement.classList.add(BlockType.HEAD);
+
+        snake.tail.forEach((tail) => {
+            let element = document.querySelector( `[data-x="${tail.x}"][data-y="${tail.y}"]`);
+            element.classList.add(BlockType.TAIL);
+        });
+    },
+
+    createBlock (x, y, blockType) {
+        let block = document.createElement('div');
+        block.classList.add('block');
+        block.classList.add(blockType);
+        block.dataset.x = x;
+        block.dataset.y = y;
+
+        return block;
+    },
+
+    initGame() {
+        for (let y = 0; y < this.mapHeight; y++) {
+            for (let x = 0; x < this.mapWidth; x++) {
+                let block;
+
+                if (y === this.mapCenterY && x === this.mapCenterX) {
+                    block = this.createBlock(x, y, BlockType.HEAD);
+                } else if (snake.tail.some((tail) => tail.x === x && tail.y ===y)) {
+                    block = this.createBlock(x, y, BlockType.TAIL);
+                } else {
+                    block = this.createBlock(x, y, BlockType.DEFAULT);
+                }
+
+                this.map.appendChild(block);
+            }
         }
+    }
+};
 
-        for (let j = 0; j < game.length; j++) {
-            let isEmpty = game[0][j] === '' || game[1][j] === '' || game[2][j] === '';
-            let isEqual = game[0][j] === game[1][j] && game[1][j] === game[2][j];
-            checkWin(isEmpty, isEqual);
+// snake state
+let snake = {
+    head: {x: game.mapCenterX, y: game.mapCenterY},
+    tail: [
+        {x: game.mapCenterX, y: game.mapCenterY + 1},
+        {x: game.mapCenterX, y: game.mapCenterY + 2},
+        {x: game.mapCenterX, y: game.mapCenterY + 3},
+        {x: game.mapCenterX, y: game.mapCenterY + 4}
+    ],
+    direction: Direction.UP,
+    move() {
+        let delta = directionDelta[this.direction];
+
+        let prev = {...this.head};
+
+        this.head.x += delta.x;
+        this.head.y += delta.y;
+
+        this.tail.forEach((tail) => {
+            let temp = {...tail};
+            tail.y = prev.y;
+            tail.x = prev.x;
+
+            prev = temp;
+        })
+    },
+    changeDirection(dir) {
+        switch (dir) {
+            case Direction.UP: {
+                if (this.direction !== Direction.DOWN) {
+                    this.direction = dir;
+                }
+                break;
+            }
+            case Direction.DOWN: {
+                if (this.direction !== Direction.UP) {
+                    this.direction = dir;
+                }
+                break;
+            }
+            case Direction.RIGHT: {
+                if (this.direction !== Direction.LEFT) {
+                    this.direction = dir;
+                }
+                break;
+            }
+            case Direction.LEFT: {
+                if (this.direction !== Direction.RIGHT) {
+                    this.direction = dir;
+                }
+                break;
+            }
         }
+    }
+};
 
-        let isFirstDiagonalEmpty = game[0][0] === '' || game[1][1] === '' || game[2][2] === '';
-        let isFirstDiagonalEqual = game[0][0] === game[1][1] && game[1][1] === game[2][2];
-        checkWin(isFirstDiagonalEmpty, isFirstDiagonalEqual);
+function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
 
-        let isSecondDiagonalEmpty = game[0][2] === '' || game[1][1] === '' || game[2][0] === '';
-        let isSecondDiagonalEqual = game[0][2] === game[1][1] && game[1][1] === game[2][0];
-        checkWin(isSecondDiagonalEmpty, isSecondDiagonalEqual);
+game.initGame();
 
-        checkDraw(fields, game);
-
-        if (currentPlayer === 'cross') {
-            currentPlayer = 'zero';
+document.addEventListener('keydown', (event) => {
+if (KeyName.hasOwnProperty(event.key)) {
+        if (!game.isStarted) {
+            game.start();
         } else {
-            currentPlayer = 'cross';
+            snake.changeDirection(DirectionMap[event.key]);
         }
-    });
+    }
+});
 
-}
